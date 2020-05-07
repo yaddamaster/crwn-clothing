@@ -1,14 +1,83 @@
 import React from 'react';
 import { Route } from 'react-router-dom';
+import { connect } from 'react-redux';
+
+import { updateCollections } from '../../redux/shop/shop.actions';
+
+import WithSpinner from '../../components/with-spinner/with-spinner.component';
 
 import CollectionsOverview from '../../components/collection-overview/collections-overview.component';
 import CollectionPage from '../collection/collection.component';
 
-const ShopPage = ({ match }) => (
-    <div className='shop-page'>
-        <Route exact path={`${match.path}`} component={CollectionsOverview} />
-        <Route path={`${match.path}/:collectionId`} component={CollectionPage} />
-    </div>
-);
+import { firestore, convertCollectionsSnapshotToMap } from '../../firebase/firebase.utils';
 
-export default ShopPage;
+const CollectionsOverviewWithSpinner = WithSpinner(CollectionsOverview);
+const CollectionPageWithSpinner = WithSpinner(CollectionPage);
+
+class ShopPage extends React.Component {
+    constructor() {
+        super();
+
+        this.state = {
+            loading: true
+        }
+    }
+
+    unsubscriptFromSnapshot = null;
+
+    componentDidMount() {
+        const { updateCollections } = this.props;
+        const collectionRef = firestore.collection('collections');
+
+        // REST PATTERN
+        // fetch('https://firestore.googleapis.com/v1/projects/crwn-db-da56b/databases/(default)/documents/collections'
+        // )
+        //     .then(response => response.json())
+        //     .then(collections => console.log(collections));
+
+        // PROMISE PATTERN
+        collectionRef.get().then(snapshot => {
+            const collectionsMap = convertCollectionsSnapshotToMap(snapshot);
+            updateCollections(collectionsMap);
+            this.setState({ loading: false });
+        })
+        
+        // OBSERVABLE PATTERN
+        // this.unsubscriptFromSnapshot = collectionRef.onSnapshot(async snapshot => {
+        //     const collectionsMap = convertCollectionsSnapshotToMap(snapshot);
+        //     updateCollections(collectionsMap);
+        //     this.setState({ loading: false });
+        // });
+    }
+
+    render() {
+        const { match } = this.props;
+        const { loading } = this.state;
+
+        return (
+            <div className='shop-page'>
+                <Route 
+                    exact path={`${match.path}`} 
+                    render={props => (
+                        <CollectionsOverviewWithSpinner isLoading={loading} {...props} />
+                    )}
+                />
+                <Route 
+                    path={`${match.path}/:collectionId`} 
+                    render={props => (
+                        <CollectionPageWithSpinner isLoading={loading} {...props} />
+                    )}
+                />
+            </div>
+        );
+    }
+};
+
+const mapDispatchToProps = dispatch => ({
+    updateCollections: collectionsMap => dispatch(updateCollections(collectionsMap))
+});
+
+export default connect(
+    null, 
+    mapDispatchToProps
+)(ShopPage);
